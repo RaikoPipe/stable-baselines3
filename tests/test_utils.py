@@ -1,20 +1,26 @@
 import os
 import shutil
 
-import gym
+import gymnasium as gym
 import numpy as np
 import pytest
 import torch as th
-from gym import spaces
+from gymnasium import spaces
 
 import stable_baselines3 as sb3
-from stable_baselines3 import A2C, PPO
+from stable_baselines3 import A2C
 from stable_baselines3.common.atari_wrappers import ClipRewardEnv, MaxAndSkipEnv
 from stable_baselines3.common.env_util import is_wrapped, make_atari_env, make_vec_env, unwrap_wrapper
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.noise import ActionNoise, OrnsteinUhlenbeckActionNoise, VectorizedActionNoise
-from stable_baselines3.common.utils import get_system_info, is_vectorized_observation, polyak_update, zip_strict
+from stable_baselines3.common.utils import (
+    get_parameters_by_name,
+    get_system_info,
+    is_vectorized_observation,
+    polyak_update,
+    zip_strict,
+)
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 
 
@@ -180,22 +186,23 @@ class AlwaysDoneWrapper(gym.Wrapper):
     # Pretends that environment only has single step for each
     # episode.
     def __init__(self, env):
-        super(AlwaysDoneWrapper, self).__init__(env)
+        super().__init__(env)
         self.last_obs = None
         self.needs_reset = True
 
     def step(self, action):
-        obs, reward, done, info = self.env.step(action)
-        self.needs_reset = done
+        obs, reward, done, truncated, info = self.env.step(action)
+        self.needs_reset = done or truncated
         self.last_obs = obs
-        return obs, reward, True, info
+        return obs, reward, True, truncated, info
 
     def reset(self, **kwargs):
+        info = {}
         if self.needs_reset:
-            obs = self.env.reset(**kwargs)
+            obs, info = self.env.reset(**kwargs)
             self.last_obs = obs
             self.needs_reset = False
-        return self.last_obs
+        return self.last_obs, info
 
 
 @pytest.mark.parametrize("n_envs", [1, 2, 5, 7])
@@ -229,7 +236,7 @@ def test_evaluate_policy_monitors(vec_env_class):
     # Also test VecEnvs
     n_eval_episodes = 3
     n_envs = 2
-    env_id = "CartPole-v0"
+    env_id = "CartPole-v1"
     model = A2C("MlpPolicy", env_id, seed=0)
 
     def make_eval_env(with_monitor, wrapper_class=gym.Wrapper):
@@ -322,6 +329,22 @@ def test_vec_noise():
     assert len(vec.noises) == num_envs
 
 
+def test_get_parameters_by_name():
+    model = th.nn.Sequential(th.nn.Linear(5, 5), th.nn.BatchNorm1d(5))
+    # Initialize stats
+    model(th.ones(3, 5))
+    included_names = ["weight", "bias", "running_"]
+    # 2 x weight, 2 x bias, 1 x running_mean, 1 x running_var; Ignore num_batches_tracked.
+    parameters = get_parameters_by_name(model, included_names)
+    assert len(parameters) == 6
+    assert th.allclose(parameters[4], model[1].running_mean)
+    assert th.allclose(parameters[5], model[1].running_var)
+    parameters = get_parameters_by_name(model, ["running_"])
+    assert len(parameters) == 2
+    assert th.allclose(parameters[0], model[1].running_mean)
+    assert th.allclose(parameters[1], model[1].running_var)
+
+
 def test_polyak():
     param1, param2 = th.nn.Parameter(th.ones((5, 5))), th.nn.Parameter(th.zeros((5, 5)))
     target1, target2 = th.nn.Parameter(th.ones((5, 5))), th.nn.Parameter(th.zeros((5, 5)))
@@ -364,19 +387,6 @@ def test_is_wrapped():
     assert is_wrapped(env, Monitor)
     # Test that unwrap works as expected
     assert unwrap_wrapper(env, Monitor) == monitor_env
-
-
-def test_ppo_warnings():
-    """Test that PPO warns and errors correctly on
-    problematic rollour buffer sizes"""
-
-    # Only 1 step: advantage normalization will return NaN
-    with pytest.raises(AssertionError):
-        PPO("MlpPolicy", "Pendulum-v1", n_steps=1)
-
-    # Truncated mini-batch
-    with pytest.warns(UserWarning):
-        PPO("MlpPolicy", "Pendulum-v1", n_steps=6, batch_size=8)
 
 
 def test_get_system_info():

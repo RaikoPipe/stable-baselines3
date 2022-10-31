@@ -1,10 +1,10 @@
 import operator
-import warnings
+from typing import Optional
 
-import gym
+import gymnasium as gym
 import numpy as np
 import pytest
-from gym import spaces
+from gymnasium import spaces
 
 from stable_baselines3 import SAC, TD3, HerReplayBuffer
 from stable_baselines3.common.monitor import Monitor
@@ -34,20 +34,23 @@ class DummyRewardEnv(gym.Env):
         self.t += 1
         index = (self.t + self.return_reward_idx) % len(self.returned_rewards)
         returned_value = self.returned_rewards[index]
-        return np.array([returned_value]), returned_value, self.t == len(self.returned_rewards), {}
+        done = truncated = self.t == len(self.returned_rewards)
+        return np.array([returned_value]), returned_value, done, truncated, {}
 
-    def reset(self):
+    def reset(self, seed: Optional[int] = None):
+        if seed is not None:
+            super().reset(seed=seed)
         self.t = 0
-        return np.array([self.returned_rewards[self.return_reward_idx]])
+        return np.array([self.returned_rewards[self.return_reward_idx]]), {}
 
 
-class DummyDictEnv(gym.GoalEnv):
+class DummyDictEnv(gym.Env):
     """
     Dummy gym goal env for testing purposes
     """
 
     def __init__(self):
-        super(DummyDictEnv, self).__init__()
+        super().__init__()
         self.observation_space = spaces.Dict(
             {
                 "observation": spaces.Box(low=-20.0, high=20.0, shape=(4,), dtype=np.float32),
@@ -57,14 +60,16 @@ class DummyDictEnv(gym.GoalEnv):
         )
         self.action_space = spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32)
 
-    def reset(self):
-        return self.observation_space.sample()
+    def reset(self, seed: Optional[int] = None):
+        if seed is not None:
+            super().reset(seed=seed)
+        return self.observation_space.sample(), {}
 
     def step(self, action):
         obs = self.observation_space.sample()
         reward = self.compute_reward(obs["achieved_goal"], obs["desired_goal"], {})
         done = np.random.rand() > 0.8
-        return obs, reward, done, {}
+        return obs, reward, done, False, {}
 
     def compute_reward(self, achieved_goal: np.ndarray, desired_goal: np.ndarray, _info) -> np.float32:
         distance = np.linalg.norm(achieved_goal - desired_goal, axis=-1)
@@ -87,13 +92,15 @@ class DummyMixedDictEnv(gym.Env):
         )
         self.action_space = spaces.Box(low=-1, high=1, shape=(3,), dtype=np.float32)
 
-    def reset(self):
-        return self.observation_space.sample()
+    def reset(self, seed: Optional[int] = None):
+        if seed is not None:
+            super().reset(seed=seed)
+        return self.observation_space.sample(), {}
 
     def step(self, action):
         obs = self.observation_space.sample()
         done = np.random.rand() > 0.8
-        return obs, 0.0, done, {}
+        return obs, 0.0, done, False, {}
 
 
 def allclose(obs_1, obs_2):
@@ -116,15 +123,6 @@ def make_env():
 
 def make_dict_env():
     return Monitor(DummyDictEnv())
-
-
-def test_deprecation():
-    venv = DummyVecEnv([lambda: gym.make("CartPole-v1")])
-    venv = VecNormalize(venv)
-    with warnings.catch_warnings(record=True) as record:
-        assert np.allclose(venv.ret, venv.returns)
-    # Deprecation warning when using .ret
-    assert len(record) == 1
 
 
 def check_rms_equal(rmsa, rmsb):
@@ -380,19 +378,18 @@ def test_offpolicy_normalization(model_class, online_sampling):
     assert model.get_vec_normalize_env() is eval_env
     model.learn(total_timesteps=10)
     model.set_env(env)
-
-    model.learn(total_timesteps=150, eval_env=eval_env, eval_freq=75)
+    model.learn(total_timesteps=150)
     # Check getter
     assert isinstance(model.get_vec_normalize_env(), VecNormalize)
 
 
 @pytest.mark.parametrize("make_env", [make_env, make_dict_env])
 def test_sync_vec_normalize(make_env):
-    env = DummyVecEnv([make_env])
+    original_env = DummyVecEnv([make_env])
 
-    assert unwrap_vec_normalize(env) is None
+    assert unwrap_vec_normalize(original_env) is None
 
-    env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=100.0, clip_reward=100.0)
+    env = VecNormalize(original_env, norm_obs=True, norm_reward=True, clip_obs=100.0, clip_reward=100.0)
 
     assert isinstance(unwrap_vec_normalize(env), VecNormalize)
 
@@ -432,6 +429,17 @@ def test_sync_vec_normalize(make_env):
     # Now they must be synced
     assert allclose(obs, eval_env.normalize_obs(original_obs))
     assert allclose(env.normalize_reward(dummy_rewards), eval_env.normalize_reward(dummy_rewards))
+
+    # Check synchronization when only reward is normalized
+    env = VecNormalize(original_env, norm_obs=False, norm_reward=True, clip_reward=100.0)
+    eval_env = DummyVecEnv([make_env])
+    eval_env = VecNormalize(eval_env, training=False, norm_obs=False, norm_reward=False)
+    env.reset()
+    env.step([env.action_space.sample()])
+    assert not np.allclose(env.ret_rms.mean, eval_env.ret_rms.mean)
+    sync_envs_normalization(env, eval_env)
+    assert np.allclose(env.ret_rms.mean, eval_env.ret_rms.mean)
+    assert np.allclose(env.ret_rms.var, eval_env.ret_rms.var)
 
 
 def test_discrete_obs():

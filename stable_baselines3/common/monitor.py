@@ -7,11 +7,11 @@ import time
 from glob import glob
 from typing import Dict, List, Optional, Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import pandas
 
-from stable_baselines3.common.type_aliases import GymObs, GymStepReturn
+from stable_baselines3.common.type_aliases import Gym26ResetReturn, Gym26StepReturn
 
 
 class Monitor(gym.Wrapper):
@@ -24,6 +24,8 @@ class Monitor(gym.Wrapper):
     :param reset_keywords: extra keywords for the reset call,
         if extra parameters are needed at reset
     :param info_keywords: extra information to log, from the information return of env.step()
+    :param override_existing: appends to file if ``filename`` exists, otherwise
+        override existing files (default)
     """
 
     EXT = "monitor.csv"
@@ -35,14 +37,16 @@ class Monitor(gym.Wrapper):
         allow_early_resets: bool = True,
         reset_keywords: Tuple[str, ...] = (),
         info_keywords: Tuple[str, ...] = (),
+        override_existing: bool = True,
     ):
-        super(Monitor, self).__init__(env=env)
+        super().__init__(env=env)
         self.t_start = time.time()
         if filename is not None:
             self.results_writer = ResultsWriter(
                 filename,
                 header={"t_start": self.t_start, "env_id": env.spec and env.spec.id},
                 extra_keys=reset_keywords + info_keywords,
+                override_existing=override_existing,
             )
         else:
             self.results_writer = None
@@ -57,7 +61,7 @@ class Monitor(gym.Wrapper):
         self.total_steps = 0
         self.current_reset_info = {}  # extra info about the current episode, that was passed in during reset()
 
-    def reset(self, **kwargs) -> GymObs:
+    def reset(self, **kwargs) -> Gym26ResetReturn:
         """
         Calls the Gym environment reset. Can only be called if the environment is over, or if allow_early_resets is True
 
@@ -78,7 +82,7 @@ class Monitor(gym.Wrapper):
             self.current_reset_info[key] = value
         return self.env.reset(**kwargs)
 
-    def step(self, action: Union[np.ndarray, int]) -> GymStepReturn:
+    def step(self, action: Union[np.ndarray, int]) -> Gym26StepReturn:
         """
         Step the environment with the given action
 
@@ -87,9 +91,9 @@ class Monitor(gym.Wrapper):
         """
         if self.needs_reset:
             raise RuntimeError("Tried to step environment that needs reset")
-        observation, reward, done, info = self.env.step(action)
+        observation, reward, done, truncated, info = self.env.step(action)
         self.rewards.append(reward)
-        if done:
+        if done or truncated:
             self.needs_reset = True
             ep_rew = sum(self.rewards)
             ep_len = len(self.rewards)
@@ -104,13 +108,13 @@ class Monitor(gym.Wrapper):
                 self.results_writer.write_row(ep_info)
             info["episode"] = ep_info
         self.total_steps += 1
-        return observation, reward, done, info
+        return observation, reward, done, truncated, info
 
     def close(self) -> None:
         """
         Closes the environment
         """
-        super(Monitor, self).close()
+        super().close()
         if self.results_writer is not None:
             self.results_writer.close()
 
@@ -159,10 +163,13 @@ class ResultsWriter:
     """
     A result writer that saves the data from the `Monitor` class
 
-    :param filename: the location to save a log file, can be None for no log
+    :param filename: the location to save a log file. When it does not end in
+        the string ``"monitor.csv"``, this suffix will be appended to it
     :param header: the header dictionary object of the saved csv
-    :param reset_keywords: the extra information to log, typically is composed of
+    :param extra_keys: the extra information to log, typically is composed of
         ``reset_keywords`` and ``info_keywords``
+    :param override_existing: appends to file if ``filename`` exists, otherwise
+        override existing files (default)
     """
 
     def __init__(
@@ -170,6 +177,7 @@ class ResultsWriter:
         filename: str = "",
         header: Optional[Dict[str, Union[float, str]]] = None,
         extra_keys: Tuple[str, ...] = (),
+        override_existing: bool = True,
     ):
         if header is None:
             header = {}
@@ -178,11 +186,18 @@ class ResultsWriter:
                 filename = os.path.join(filename, Monitor.EXT)
             else:
                 filename = filename + "." + Monitor.EXT
+        filename = os.path.realpath(filename)
+        # Create (if any) missing filename directories
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        # Append mode when not overridding existing file
+        mode = "w" if override_existing else "a"
         # Prevent newline issue on Windows, see GH issue #692
-        self.file_handler = open(filename, "wt", newline="\n")
-        self.file_handler.write("#%s\n" % json.dumps(header))
+        self.file_handler = open(filename, f"{mode}t", newline="\n")
         self.logger = csv.DictWriter(self.file_handler, fieldnames=("r", "l", "t") + extra_keys)
-        self.logger.writeheader()
+        if override_existing:
+            self.file_handler.write(f"#{json.dumps(header)}\n")
+            self.logger.writeheader()
+
         self.file_handler.flush()
 
     def write_row(self, epinfo: Dict[str, Union[float, int]]) -> None:
@@ -224,7 +239,7 @@ def load_results(path: str) -> pandas.DataFrame:
         raise LoadMonitorResultsError(f"No monitor files of the form *{Monitor.EXT} found in {path}")
     data_frames, headers = [], []
     for file_name in monitor_files:
-        with open(file_name, "rt") as file_handler:
+        with open(file_name) as file_handler:
             first_line = file_handler.readline()
             assert first_line[0] == "#"
             header = json.loads(first_line[1:])

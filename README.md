@@ -1,6 +1,8 @@
 <img src="docs/\_static/img/logo.png" align="right" width="40%"/>
 
-[![pipeline status](https://gitlab.com/araffin/stable-baselines3/badges/master/pipeline.svg)](https://gitlab.com/araffin/stable-baselines3/-/commits/master) [![Documentation Status](https://readthedocs.org/projects/stable-baselines/badge/?version=master)](https://stable-baselines3.readthedocs.io/en/master/?badge=master) [![coverage report](https://gitlab.com/araffin/stable-baselines3/badges/master/coverage.svg)](https://gitlab.com/araffin/stable-baselines3/-/commits/master)
+<!-- [![pipeline status](https://gitlab.com/araffin/stable-baselines3/badges/master/pipeline.svg)](https://gitlab.com/araffin/stable-baselines3/-/commits/master) -->
+![CI](https://github.com/DLR-RM/stable-baselines3/workflows/CI/badge.svg)
+[![Documentation Status](https://readthedocs.org/projects/stable-baselines/badge/?version=master)](https://stable-baselines3.readthedocs.io/en/master/?badge=master) [![coverage report](https://gitlab.com/araffin/stable-baselines3/badges/master/coverage.svg)](https://gitlab.com/araffin/stable-baselines3/-/commits/master)
 [![codestyle](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 
@@ -77,7 +79,7 @@ Documentation: https://stable-baselines3.readthedocs.io/en/master/guide/rl_zoo.h
 
 We implement experimental features in a separate contrib repository: [SB3-Contrib](https://github.com/Stable-Baselines-Team/stable-baselines3-contrib)
 
-This allows SB3 to maintain a stable and compact core, while still providing the latest features, like Truncated Quantile Critics (TQC), Quantile Regression DQN (QR-DQN) or PPO with invalid action masking (Maskable PPO).
+This allows SB3 to maintain a stable and compact core, while still providing the latest features, like Recurrent PPO (PPO LSTM), Truncated Quantile Critics (TQC), Quantile Regression DQN (QR-DQN) or PPO with invalid action masking (Maskable PPO).
 
 Documentation is available online: [https://sb3-contrib.readthedocs.io/](https://sb3-contrib.readthedocs.io/)
 
@@ -115,22 +117,24 @@ Most of the library tries to follow a sklearn-like syntax for the Reinforcement 
 
 Here is a quick example of how to train and run PPO on a cartpole environment:
 ```python
-import gym
+import gymnasium as gym
 
 from stable_baselines3 import PPO
 
 env = gym.make("CartPole-v1")
 
 model = PPO("MlpPolicy", env, verbose=1)
-model.learn(total_timesteps=10000)
+model.learn(total_timesteps=10_000)
 
-obs = env.reset()
+vec_env = model.get_env()
+obs = vec_env.reset()
 for i in range(1000):
     action, _states = model.predict(obs, deterministic=True)
-    obs, reward, done, info = env.step(action)
-    env.render()
-    if done:
-      obs = env.reset()
+    obs, reward, done, info = vec_env.step(action)
+    vec_env.render()
+    # VecEnv resets automatically
+    # if done:
+    #   obs = env.reset()
 
 env.close()
 ```
@@ -140,7 +144,7 @@ Or just train a model with a one liner if [the environment is registered in Gym]
 ```python
 from stable_baselines3 import PPO
 
-model = PPO('MlpPolicy', 'CartPole-v1').learn(10000)
+model = PPO("MlpPolicy", "CartPole-v1").learn(10_000)
 ```
 
 Please read the [documentation](https://stable-baselines3.readthedocs.io/) for more examples.
@@ -172,6 +176,7 @@ All the following examples can be executed online using Google colab notebooks:
 | HER   | :x: | :heavy_check_mark: | :heavy_check_mark: | :x:                 | :x:                | :x: |
 | PPO   | :x: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: |
 | QR-DQN<sup>[1](#f1)</sup>  | :x: | :x: | :heavy_check_mark: | :x:                 | :x:                | :heavy_check_mark: |
+| RecurrentPPO<sup>[1](#f1)</sup>   | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: |
 | SAC   | :x: | :heavy_check_mark: | :x:                | :x:                 | :x:                | :heavy_check_mark: |
 | TD3   | :x: | :heavy_check_mark: | :x:                | :x:                 | :x:                | :heavy_check_mark: |
 | TQC<sup>[1](#f1)</sup>   | :x: | :heavy_check_mark: | :x:                | :x:                 | :x: | :heavy_check_mark: |
@@ -231,7 +236,7 @@ To cite this repository in publications:
 
 ## Maintainers
 
-Stable-Baselines3 is currently maintained by [Ashley Hill](https://github.com/hill-a) (aka @hill-a), [Antonin Raffin](https://araffin.github.io/) (aka [@araffin](https://github.com/araffin)), [Maximilian Ernestus](https://github.com/ernestum) (aka @ernestum), [Adam Gleave](https://github.com/adamgleave) (@AdamGleave) and [Anssi Kanervisto](https://github.com/Miffyli) (@Miffyli).
+Stable-Baselines3 is currently maintained by [Ashley Hill](https://github.com/hill-a) (aka @hill-a), [Antonin Raffin](https://araffin.github.io/) (aka [@araffin](https://github.com/araffin)), [Maximilian Ernestus](https://github.com/ernestum) (aka @ernestum), [Adam Gleave](https://github.com/adamgleave) (@AdamGleave), [Anssi Kanervisto](https://github.com/Miffyli) (@Miffyli) and [Quentin Gallouédec](https://gallouedec.com/) (@qgallouedec).
 
 **Important Note: We do not do technical support, nor consulting** and don't answer personal questions per email.
 Please post your question on the [RL Discord](https://discord.com/invite/xhfNqQv), [Reddit](https://www.reddit.com/r/reinforcementlearning/) or [Stack Overflow](https://stackoverflow.com/) in that case.

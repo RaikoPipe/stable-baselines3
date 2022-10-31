@@ -62,7 +62,7 @@ using ``policy_kwargs`` parameter:
 
 .. code-block:: python
 
-  import gym
+  import gymnasium as gym
   import torch as th
 
   from stable_baselines3 import PPO
@@ -95,14 +95,15 @@ that derives from ``BaseFeaturesExtractor`` and then pass it to the model when t
 .. note::
 
   By default the feature extractor is shared between the actor and the critic to save computation (when applicable).
-  However, this can be changed by defining a custom policy for on-policy algorithms or setting
-  ``share_features_extractor=False`` in the ``policy_kwargs`` for off-policy algorithms
-  (and when applicable).
+  However, this can be changed by defining a custom policy for on-policy algorithms
+  (see `issue #1066 <https://github.com/DLR-RM/stable-baselines3/issues/1066#issuecomment-1246866844>`_
+  for more information) or setting ``share_features_extractor=False`` in the
+  ``policy_kwargs`` for off-policy algorithms (and when applicable).
 
 
 .. code-block:: python
 
-  import gym
+  import gymnasium as gym
   import torch as th
   import torch.nn as nn
 
@@ -169,7 +170,7 @@ downsampling and "vector" with a single linear layer.
 
 .. code-block:: python
 
-  import gym
+  import gymnasium as gym
   import torch as th
   from torch import nn
 
@@ -287,7 +288,7 @@ If your task requires even more granular control over the policy/value architect
 
   from typing import Callable, Dict, List, Optional, Tuple, Type, Union
 
-  import gym
+  import gymnasium as gym
   import torch as th
   from torch import nn
 

@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch as th
 
@@ -11,7 +11,9 @@ from stable_baselines3.common import callbacks, vec_env
 
 GymEnv = Union[gym.Env, vec_env.VecEnv]
 GymObs = Union[Tuple, Dict[str, Any], np.ndarray, int]
+Gym26ResetReturn = Tuple[GymObs, Dict]
 GymStepReturn = Tuple[GymObs, float, bool, Dict]
+Gym26StepReturn = Tuple[GymObs, float, bool, bool, Dict]
 TensorDict = Dict[Union[str, int], th.Tensor]
 OptimizerStateDict = Dict[str, Any]
 MaybeCallback = Union[None, Callable, List[callbacks.BaseCallback], callbacks.BaseCallback]
@@ -50,7 +52,7 @@ class ReplayBufferSamples(NamedTuple):
 class DictReplayBufferSamples(ReplayBufferSamples):
     observations: TensorDict
     actions: th.Tensor
-    next_observations: th.Tensor
+    next_observations: TensorDict
     dones: th.Tensor
     rewards: th.Tensor
 

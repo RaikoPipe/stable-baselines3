@@ -3,7 +3,7 @@ import json
 import os
 import uuid
 
-import gym
+import gymnasium as gym
 import pandas
 import pytest
 
@@ -36,7 +36,7 @@ def test_vec_monitor(tmp_path):
 
     monitor_env.close()
 
-    with open(monitor_file, "rt") as file_handler:
+    with open(monitor_file) as file_handler:
         first_line = file_handler.readline()
         assert first_line.startswith("#")
         metadata = json.loads(first_line[1:])
@@ -66,7 +66,7 @@ def test_vec_monitor_info_keywords(tmp_path):
 
     monitor_env.close()
 
-    with open(monitor_file, "rt") as f:
+    with open(monitor_file) as f:
         reader = csv.reader(f)
         for i, line in enumerate(reader):
             if i == 0 or i == 1:
@@ -132,15 +132,15 @@ def test_vec_monitor_ppo(recwarn):
     """
     Test the `VecMonitor` with PPO
     """
-    env = DummyVecEnv([lambda: gym.make("CartPole-v1")])
-    env.seed(0)
+    env = DummyVecEnv([lambda: gym.make("CartPole-v1", disable_env_checker=True)])
+    env.seed(seed=0)
     monitor_env = VecMonitor(env)
     model = PPO("MlpPolicy", monitor_env, verbose=1, n_steps=64, device="cpu")
     model.learn(total_timesteps=250)
 
     # No warnings because using `VecMonitor`
     evaluate_policy(model, monitor_env)
-    assert len(recwarn) == 0
+    assert len(recwarn) == 0, f"{[str(warning) for warning in recwarn]}"
 
 
 def test_vec_monitor_warn():

@@ -1,7 +1,7 @@
-import gym
+import gymnasium as gym
 import numpy as np
 import pytest
-from gym import spaces
+from gymnasium import spaces
 
 from stable_baselines3.common.vec_env import DummyVecEnv, VecCheckNan
 
@@ -12,7 +12,7 @@ class NanAndInfEnv(gym.Env):
     metadata = {"render.modes": ["human"]}
 
     def __init__(self):
-        super(NanAndInfEnv, self).__init__()
+        super().__init__()
         self.action_space = spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float64)
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float64)
 
@@ -24,11 +24,11 @@ class NanAndInfEnv(gym.Env):
             obs = float("inf")
         else:
             obs = 0
-        return [obs], 0.0, False, {}
+        return [obs], 0.0, False, False, {}
 
     @staticmethod
     def reset():
-        return [0.0]
+        return [0.0], {}
 
     def render(self, mode="human", close=False):
         pass

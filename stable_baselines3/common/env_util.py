@@ -1,10 +1,11 @@
 import os
 from typing import Any, Callable, Dict, Optional, Type, Union
 
-import gym
+import gymnasium as gym
 
 from stable_baselines3.common.atari_wrappers import AtariWrapper
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.utils import compat_gym_seed
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnv
 
 
@@ -36,7 +37,7 @@ def is_wrapped(env: Type[gym.Env], wrapper_class: Type[gym.Wrapper]) -> bool:
 
 
 def make_vec_env(
-    env_id: Union[str, Type[gym.Env]],
+    env_id: Union[str, Callable[..., gym.Env]],
     n_envs: int = 1,
     seed: Optional[int] = None,
     start_index: int = 0,
@@ -53,7 +54,7 @@ def make_vec_env(
     By default it uses a ``DummyVecEnv`` which is usually faster
     than a ``SubprocVecEnv``.
 
-    :param env_id: the environment ID or the environment class
+    :param env_id: either the env ID, the env class or a callable returning an env
     :param n_envs: the number of environments you wish to have in parallel
     :param seed: the initial seed for the random number generator
     :param start_index: start rank index
@@ -62,6 +63,9 @@ def make_vec_env(
         in a Monitor wrapper to provide additional information about training.
     :param wrapper_class: Additional wrapper to use on the environment.
         This can also be a function with single argument that wraps the environment in many things.
+        Note: the wrapper specified by this parameter will be applied after the ``Monitor`` wrapper.
+        if some cases (e.g. with TimeLimit wrapper) this can lead to undesired behavior.
+        See here for more details: https://github.com/DLR-RM/stable-baselines3/issues/894
     :param env_kwargs: Optional keyword argument to pass to the env constructor
     :param vec_env_cls: A custom ``VecEnv`` class constructor. Default: None.
     :param vec_env_kwargs: Keyword arguments to pass to the ``VecEnv`` class constructor.
@@ -81,7 +85,7 @@ def make_vec_env(
             else:
                 env = env_id(**env_kwargs)
             if seed is not None:
-                env.seed(seed + rank)
+                compat_gym_seed(env, seed=seed + rank)
                 env.action_space.seed(seed + rank)
             # Wrap the env in a Monitor wrapper
             # to have additional training information
@@ -106,7 +110,7 @@ def make_vec_env(
 
 
 def make_atari_env(
-    env_id: Union[str, Type[gym.Env]],
+    env_id: Union[str, Callable[..., gym.Env]],
     n_envs: int = 1,
     seed: Optional[int] = None,
     start_index: int = 0,
@@ -121,7 +125,7 @@ def make_atari_env(
     Create a wrapped, monitored VecEnv for Atari.
     It is a wrapper around ``make_vec_env`` that includes common preprocessing for Atari games.
 
-    :param env_id: the environment ID or the environment class
+    :param env_id: either the env ID, the env class or a callable returning an env
     :param n_envs: the number of environments you wish to have in parallel
     :param seed: the initial seed for the random number generator
     :param start_index: start rank index

@@ -5,14 +5,14 @@ import pathlib
 import time
 from abc import ABC, abstractmethod
 from collections import deque
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, TypeVar, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch as th
 
 from stable_baselines3.common import utils
-from stable_baselines3.common.callbacks import BaseCallback, CallbackList, ConvertCallback, EvalCallback
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList, ConvertCallback, ProgressBarCallback
 from stable_baselines3.common.env_util import is_wrapped
 from stable_baselines3.common.logger import Logger
 from stable_baselines3.common.monitor import Monitor
@@ -23,6 +23,7 @@ from stable_baselines3.common.save_util import load_from_zip_file, recursive_get
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import (
     check_for_correct_spaces,
+    compat_gym_seed,
     get_device,
     get_schedule_fn,
     get_system_info,
@@ -43,7 +44,7 @@ def maybe_make_env(env: Union[GymEnv, str, None], verbose: int) -> Optional[GymE
     """If env is a string, make the environment; otherwise, return env.
 
     :param env: The environment to learn from.
-    :param verbose: logging verbosity
+    :param verbose: Verbosity level: 0 for no output, 1 for indicating if envrironment is created
     :return A Gym (vector) environment.
     """
     if isinstance(env, str):
@@ -53,25 +54,27 @@ def maybe_make_env(env: Union[GymEnv, str, None], verbose: int) -> Optional[GymE
     return env
 
 
+BaseAlgorithmSelf = TypeVar("BaseAlgorithmSelf", bound="BaseAlgorithm")
+
+
 class BaseAlgorithm(ABC):
     """
     The base of RL algorithms
 
-    :param policy: Policy object
+    :param policy: The policy model to use (MlpPolicy, CnnPolicy, ...)
     :param env: The environment to learn from
                 (if registered in Gym, can be str. Can be None for loading trained models)
     :param learning_rate: learning rate for the optimizer,
         it can be a function of the current progress remaining (from 1 to 0)
     :param policy_kwargs: Additional arguments to be passed to the policy on creation
     :param tensorboard_log: the log location for tensorboard (if None, no logging)
-    :param verbose: The verbosity level: 0 none, 1 training information, 2 debug
+    :param verbose: Verbosity level: 0 for no output, 1 for info messages (such as device or wrappers used), 2 for
+        debug messages
     :param device: Device on which the code should run.
         By default, it will try to use a Cuda compatible device and fallback to cpu
         if it is not possible.
     :param support_multi_env: Whether the algorithm supports training
         with multiple environments (as in A2C)
-    :param create_eval_env: Whether to create a second environment that will be
-        used for evaluating the agent periodically. (Only available when passing string for the environment)
     :param monitor_wrapper: When creating an environment, whether to wrap it
         or not in a Monitor wrapper.
     :param seed: Seed for the pseudo random generators
@@ -87,7 +90,7 @@ class BaseAlgorithm(ABC):
 
     def __init__(
         self,
-        policy: Type[BasePolicy],
+        policy: Union[str, Type[BasePolicy]],
         env: Union[GymEnv, str, None],
         learning_rate: Union[float, Schedule],
         policy_kwargs: Optional[Dict[str, Any]] = None,
@@ -95,7 +98,6 @@ class BaseAlgorithm(ABC):
         verbose: int = 0,
         device: Union[th.device, str] = "auto",
         support_multi_env: bool = False,
-        create_eval_env: bool = False,
         monitor_wrapper: bool = True,
         seed: Optional[int] = None,
         use_sde: bool = False,
@@ -108,7 +110,7 @@ class BaseAlgorithm(ABC):
             self.policy_class = policy
 
         self.device = get_device(device)
-        if verbose > 0:
+        if verbose >= 1:
             print(f"Using {self.device} device")
 
         self.env = None  # type: Optional[GymEnv]
@@ -124,7 +126,6 @@ class BaseAlgorithm(ABC):
         self._total_timesteps = 0
         # Used for computing fps, it is updated at each call of learn()
         self._num_timesteps_at_start = 0
-        self.eval_env = None
         self.seed = seed
         self.action_noise = None  # type: Optional[ActionNoise]
         self.start_time = None
@@ -155,10 +156,6 @@ class BaseAlgorithm(ABC):
 
         # Create and wrap the env if needed
         if env is not None:
-            if isinstance(env, str):
-                if create_eval_env:
-                    self.eval_env = maybe_make_env(env, self.verbose)
-
             env = maybe_make_env(env, self.verbose)
             env = self._wrap_env(env, self.verbose, monitor_wrapper)
 
@@ -185,6 +182,11 @@ class BaseAlgorithm(ABC):
             if self.use_sde and not isinstance(self.action_space, gym.spaces.Box):
                 raise ValueError("generalized State-Dependent Exploration (gSDE) can only be used with continuous actions.")
 
+            if isinstance(self.action_space, gym.spaces.Box):
+                assert np.all(
+                    np.isfinite(np.array([self.action_space.low, self.action_space.high]))
+                ), "Continuous action space must have a finite lower and upper bound"
+
     @staticmethod
     def _wrap_env(env: GymEnv, verbose: int = 0, monitor_wrapper: bool = True) -> VecEnv:
         """ "
@@ -193,7 +195,7 @@ class BaseAlgorithm(ABC):
         or to re-order the image channels.
 
         :param env:
-        :param verbose:
+        :param verbose: Verbosity level: 0 for no output, 1 for indicating wrappers used
         :param monitor_wrapper: Whether to wrap the env in a ``Monitor`` when possible.
         :return: The wrapped environment.
         """
@@ -208,11 +210,6 @@ class BaseAlgorithm(ABC):
 
         # Make sure that dict-spaces are not nested (not supported)
         check_for_nested_spaces(env.observation_space)
-
-        if isinstance(env.observation_space, gym.spaces.Dict):
-            for space in env.observation_space.spaces.values():
-                if isinstance(space, gym.spaces.Dict):
-                    raise ValueError("Nested observation spaces are not supported (Dict spaces inside Dict space).")
 
         if not is_vecenv_wrapped(env, VecTransposeImage):
             wrap_with_vectranspose = False
@@ -259,21 +256,6 @@ class BaseAlgorithm(ABC):
         """Getter for the logger object."""
         return self._logger
 
-    def _get_eval_env(self, eval_env: Optional[GymEnv]) -> Optional[GymEnv]:
-        """
-        Return the environment that will be used for evaluation.
-
-        :param eval_env:)
-        :return:
-        """
-        if eval_env is None:
-            eval_env = self.eval_env
-
-        if eval_env is not None:
-            eval_env = self._wrap_env(eval_env, self.verbose)
-            assert eval_env.num_envs == 1
-        return eval_env
-
     def _setup_lr_schedule(self) -> None:
         """Transform to callable if needed."""
         self.lr_schedule = get_schedule_fn(self.learning_rate)
@@ -316,7 +298,6 @@ class BaseAlgorithm(ABC):
             "policy",
             "device",
             "env",
-            "eval_env",
             "replay_buffer",
             "rollout_buffer",
             "_vec_normalize_env",
@@ -363,17 +344,11 @@ class BaseAlgorithm(ABC):
     def _init_callback(
         self,
         callback: MaybeCallback,
-        eval_env: Optional[VecEnv] = None,
-        eval_freq: int = 10000,
-        n_eval_episodes: int = 5,
-        log_path: Optional[str] = None,
+        progress_bar: bool = False,
     ) -> BaseCallback:
         """
         :param callback: Callback(s) called at every step with state of the algorithm.
-        :param eval_freq: How many steps between evaluations; if None, do not evaluate.
-        :param n_eval_episodes: How many episodes to play per evaluation
-        :param n_eval_episodes: Number of episodes to rollout during evaluation.
-        :param log_path: Path to a folder where the evaluations will be saved
+        :param progress_bar: Display a progress bar using tqdm and rich.
         :return: A hybrid callback calling `callback` and performing evaluation.
         """
         # Convert a list of callbacks into a callback
@@ -384,16 +359,9 @@ class BaseAlgorithm(ABC):
         if not isinstance(callback, BaseCallback):
             callback = ConvertCallback(callback)
 
-        # Create eval callback in charge of the evaluation
-        if eval_env is not None:
-            eval_callback = EvalCallback(
-                eval_env,
-                best_model_save_path=log_path,
-                log_path=log_path,
-                eval_freq=eval_freq,
-                n_eval_episodes=n_eval_episodes,
-            )
-            callback = CallbackList([callback, eval_callback])
+        # Add progress bar callback
+        if progress_bar:
+            callback = CallbackList([callback, ProgressBarCallback()])
 
         callback.init_callback(self)
         return callback
@@ -401,28 +369,22 @@ class BaseAlgorithm(ABC):
     def _setup_learn(
         self,
         total_timesteps: int,
-        eval_env: Optional[GymEnv],
         callback: MaybeCallback = None,
-        eval_freq: int = 10000,
-        n_eval_episodes: int = 5,
-        log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
         tb_log_name: str = "run",
+        progress_bar: bool = False,
     ) -> Tuple[int, BaseCallback]:
         """
         Initialize different variables needed for training.
 
         :param total_timesteps: The total number of samples (env steps) to train on
-        :param eval_env: Environment to use for evaluation.
         :param callback: Callback(s) called at every step with state of the algorithm.
-        :param eval_freq: How many steps between evaluations
-        :param n_eval_episodes: How many episodes to play per evaluation
-        :param log_path: Path to a folder where the evaluations will be saved
         :param reset_num_timesteps: Whether to reset or not the ``num_timesteps`` attribute
         :param tb_log_name: the name of the run for tensorboard log
-        :return:
+        :param progress_bar: Display a progress bar using tqdm and rich.
+        :return: Total timesteps and callback(s)
         """
-        self.start_time = time.time()
+        self.start_time = time.time_ns()
 
         if self.ep_info_buffer is None or reset_num_timesteps:
             # Initialize buffers if they don't exist, or reinitialize if resetting counters
@@ -449,17 +411,12 @@ class BaseAlgorithm(ABC):
             if self._vec_normalize_env is not None:
                 self._last_original_obs = self._vec_normalize_env.get_original_obs()
 
-        if eval_env is not None and self.seed is not None:
-            eval_env.seed(self.seed)
-
-        eval_env = self._get_eval_env(eval_env)
-
         # Configure logger's outputs if no logger was passed
         if not self._custom_logger:
             self._logger = utils.configure_logger(self.verbose, self.tensorboard_log, tb_log_name, reset_num_timesteps)
 
         # Create eval callback if needed
-        callback = self._init_callback(callback, eval_env, eval_freq, n_eval_episodes, log_path)
+        callback = self._init_callback(callback, progress_bar)
 
         return total_timesteps, callback
 
@@ -514,6 +471,11 @@ class BaseAlgorithm(ABC):
         # if it is not a VecEnv, make it a VecEnv
         # and do other transformations (dict obs, image transpose) if needed
         env = self._wrap_env(env, self.verbose)
+        assert env.num_envs == self.n_envs, (
+            "The number of environments to be set is different from the number of environments in the model: "
+            f"({env.num_envs} != {self.n_envs}), whereas `set_env` requires them to be the same. To load a model with "
+            f"a different number of environments, you must use `{self.__class__.__name__}.load(path, env)` instead"
+        )
         # Check that the observation spaces match
         check_for_correct_spaces(env, self.observation_space, self.action_space)
         # Update VecNormalize object
@@ -530,17 +492,14 @@ class BaseAlgorithm(ABC):
 
     @abstractmethod
     def learn(
-        self,
+        self: BaseAlgorithmSelf,
         total_timesteps: int,
         callback: MaybeCallback = None,
         log_interval: int = 100,
         tb_log_name: str = "run",
-        eval_env: Optional[GymEnv] = None,
-        eval_freq: int = -1,
-        n_eval_episodes: int = 5,
-        eval_log_path: Optional[str] = None,
         reset_num_timesteps: bool = True,
-    ) -> "BaseAlgorithm":
+        progress_bar: bool = False,
+    ) -> BaseAlgorithmSelf:
         """
         Return a trained model.
 
@@ -548,11 +507,8 @@ class BaseAlgorithm(ABC):
         :param callback: callback(s) called at every step with state of the algorithm.
         :param log_interval: The number of timesteps before logging.
         :param tb_log_name: the name of the run for TensorBoard logging
-        :param eval_env: Environment that will be used to evaluate the agent
-        :param eval_freq: Evaluate the agent every ``eval_freq`` timesteps (this may vary a little)
-        :param n_eval_episodes: Number of episode to evaluate the agent
-        :param eval_log_path: Path to a folder where the evaluations will be saved
         :param reset_num_timesteps: whether or not to reset the current timestep number (used in logging)
+        :param progress_bar: Display a progress bar using tqdm and rich.
         :return: the trained model
         """
 
@@ -589,10 +545,9 @@ class BaseAlgorithm(ABC):
             return
         set_random_seed(seed, using_cuda=self.device.type == th.device("cuda").type)
         self.action_space.seed(seed)
+        # self.env is always a VecEnv
         if self.env is not None:
             self.env.seed(seed)
-        if self.eval_env is not None:
-            self.eval_env.seed(seed)
 
     def set_parameters(
         self,
@@ -628,11 +583,11 @@ class BaseAlgorithm(ABC):
             attr = None
             try:
                 attr = recursive_getattr(self, name)
-            except Exception:
+            except Exception as e:
                 # What errors recursive_getattr could throw? KeyError, but
                 # possible something else too (e.g. if key is an int?).
                 # Catch anything for now.
-                raise ValueError(f"Key {name} is an invalid object name.")
+                raise ValueError(f"Key {name} is an invalid object name.") from e
 
             if isinstance(attr, th.optim.Optimizer):
                 # Optimizers do not support "strict" keyword...
@@ -664,7 +619,7 @@ class BaseAlgorithm(ABC):
 
     @classmethod
     def load(
-        cls,
+        cls: Type[BaseAlgorithmSelf],
         path: Union[str, pathlib.Path, io.BufferedIOBase],
         env: Optional[GymEnv] = None,
         device: Union[th.device, str] = "auto",
@@ -672,7 +627,7 @@ class BaseAlgorithm(ABC):
         print_system_info: bool = False,
         force_reset: bool = True,
         **kwargs,
-    ) -> "BaseAlgorithm":
+    ) -> BaseAlgorithmSelf:
         """
         Load the model from a zip-file.
         Warning: ``load`` re-creates the model from scratch, it does not update it in-place!
@@ -702,7 +657,10 @@ class BaseAlgorithm(ABC):
             get_system_info()
 
         data, params, pytorch_variables = load_from_zip_file(
-            path, device=device, custom_objects=custom_objects, print_system_info=print_system_info
+            path,
+            device=device,
+            custom_objects=custom_objects,
+            print_system_info=print_system_info,
         )
 
         # Remove stored device information and replace with ours
@@ -728,6 +686,9 @@ class BaseAlgorithm(ABC):
             # See issue https://github.com/DLR-RM/stable-baselines3/issues/597
             if force_reset and data is not None:
                 data["_last_obs"] = None
+            # `n_envs` must be updated. See issue https://github.com/DLR-RM/stable-baselines3/issues/1018
+            if data is not None:
+                data["n_envs"] = env.num_envs
         else:
             # Use stored env, if one exists. If not, continue as is (can be used for predict)
             if "env" in data:

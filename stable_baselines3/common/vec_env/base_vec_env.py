@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Type, Union
 
 import cloudpickle
-import gym
+import gymnasium as gym
 import numpy as np
 
 # Define type aliases here to avoid circular import
@@ -59,6 +59,7 @@ class VecEnv(ABC):
         self.num_envs = num_envs
         self.observation_space = observation_space
         self.action_space = action_space
+        self.reset_infos = [{} for _ in range(num_envs)]  # store info returned by the reset method
 
     @abstractmethod
     def reset(self) -> VecEnvObs:
@@ -305,7 +306,7 @@ class VecEnvWrapper(VecEnv):
             own_class = f"{type(self).__module__}.{type(self).__name__}"
             error_str = (
                 f"Error: Recursive attribute lookup for {name} from {own_class} is "
-                "ambiguous and hides attribute from {blocked_class}"
+                f"ambiguous and hides attribute from {blocked_class}"
             )
             raise AttributeError(error_str)
 
