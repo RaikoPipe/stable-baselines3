@@ -6,7 +6,7 @@ from torch.nn import functional as F
 
 from stable_baselines3.common.on_policy_algorithm import OnPolicyAlgorithm
 from stable_baselines3.common.policies import ActorCriticCnnPolicy, ActorCriticPolicy, BasePolicy, MultiInputActorCriticPolicy
-from stable_baselines3.common.type_aliases import gymnasium, Env, MaybeCallback, Schedule
+from stable_baselines3.common.type_aliases import gym, Env, MaybeCallback, Schedule
 from stable_baselines3.common.utils import explained_variance
 
 A2CSelf = TypeVar("A2CSelf", bound="A2C")
