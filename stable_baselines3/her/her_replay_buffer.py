@@ -134,12 +134,12 @@ class HerReplayBuffer(DictReplayBuffer):
             "observation": (self.env.num_envs,) + self.obs_shape,
             "achieved_goal": (self.env.num_envs,) + self.goal_shape,
             "desired_goal": (self.env.num_envs,) + self.goal_shape,
-            "action": (self.env.num_envs,) + (self.action_dim, ),
-            "reward": (self.env.num_envs,),
+            "action": (self.action_dim,),
+            "reward": (1,),
             "next_obs": (self.env.num_envs,) + self.obs_shape,
             "next_achieved_goal": (self.env.num_envs,) + self.goal_shape,
             "next_desired_goal": (self.env.num_envs,) + self.goal_shape,
-            "done": (self.env.num_envs,),
+            "done": (1,),
         }
         self._observation_keys = ["observation", "achieved_goal", "desired_goal"]
         self._buffer = {
@@ -339,7 +339,7 @@ class HerReplayBuffer(DictReplayBuffer):
         # no virtual transition can be created
         if len(her_indices) > 0:
             # Vectorized computation of the new reward
-            transitions["reward"][her_indices, self.env.num_envs] = self.env.env_method(
+            transitions["reward"][her_indices, 0] = self.env.env_method(
                 "compute_reward",
                 # the new state depends on the previous state and action
                 # s_{t+1} = f(s_t, a_t)
@@ -428,16 +428,16 @@ class HerReplayBuffer(DictReplayBuffer):
         self.current_idx += 1
 
         self.episode_steps += 1
-        for _done in done:
-            if _done or self.episode_steps >= self.max_episode_length:
-                self.store_episode()
-                if not self.online_sampling:
-                    # sample virtual transitions and store them in replay buffer
-                    self._sample_her_transitions()
-                    # clear storage for current episode
-                    self.reset()
 
-                self.episode_steps = 0
+        if done or self.episode_steps >= self.max_episode_length:
+            self.store_episode()
+            if not self.online_sampling:
+                # sample virtual transitions and store them in replay buffer
+                self._sample_her_transitions()
+                # clear storage for current episode
+                self.reset()
+
+            self.episode_steps = 0
 
     def store_episode(self) -> None:
         """
