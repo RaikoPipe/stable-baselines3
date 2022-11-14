@@ -339,7 +339,7 @@ class HerReplayBuffer(DictReplayBuffer):
         # no virtual transition can be created
         if len(her_indices) > 0:
             # Vectorized computation of the new reward
-            transitions["reward"][her_indices, 0] = self.env.env_method(
+            transitions["reward"][her_indices, self.env.num_envs] = self.env.env_method(
                 "compute_reward",
                 # the new state depends on the previous state and action
                 # s_{t+1} = f(s_t, a_t)
