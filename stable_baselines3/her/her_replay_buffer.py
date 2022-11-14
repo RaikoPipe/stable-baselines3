@@ -428,16 +428,16 @@ class HerReplayBuffer(DictReplayBuffer):
         self.current_idx += 1
 
         self.episode_steps += 1
+        for _done in done:
+            if _done or self.episode_steps >= self.max_episode_length:
+                self.store_episode()
+                if not self.online_sampling:
+                    # sample virtual transitions and store them in replay buffer
+                    self._sample_her_transitions()
+                    # clear storage for current episode
+                    self.reset()
 
-        if done or self.episode_steps >= self.max_episode_length:
-            self.store_episode()
-            if not self.online_sampling:
-                # sample virtual transitions and store them in replay buffer
-                self._sample_her_transitions()
-                # clear storage for current episode
-                self.reset()
-
-            self.episode_steps = 0
+                self.episode_steps = 0
 
     def store_episode(self) -> None:
         """
