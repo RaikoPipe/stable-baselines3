@@ -134,12 +134,12 @@ class HerReplayBuffer(DictReplayBuffer):
             "observation": (self.env.num_envs,) + self.obs_shape,
             "achieved_goal": (self.env.num_envs,) + self.goal_shape,
             "desired_goal": (self.env.num_envs,) + self.goal_shape,
-            "action": (self.env.num_envs,) + self.action_dim,
-            "reward": (1,),
+            "action": (self.env.num_envs,) + (self.action_dim, ),
+            "reward": (self.env.num_envs,) + (1,),
             "next_obs": (self.env.num_envs,) + self.obs_shape,
             "next_achieved_goal": (self.env.num_envs,) + self.goal_shape,
             "next_desired_goal": (self.env.num_envs,) + self.goal_shape,
-            "done": (1,),
+            "done": (self.env.num_envs,) + (1,),
         }
         self._observation_keys = ["observation", "achieved_goal", "desired_goal"]
         self._buffer = {
