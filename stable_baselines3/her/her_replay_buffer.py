@@ -27,13 +27,13 @@ def get_time_limit(env: VecEnv, current_max_episode_length: Optional[int]) -> in
             if current_max_episode_length is None:
                 raise AttributeError
         # if not available check if a valid value was passed as an argument
-        except AttributeError as e:
+        except AttributeError:
             raise ValueError(
                 "The max episode length could not be inferred.\n"
                 "You must specify a `max_episode_steps` when registering the environment,\n"
                 "use a `gym.wrappers.TimeLimit` wrapper "
                 "or pass `max_episode_length` to the model constructor"
-            ) from e
+            )
     return current_max_episode_length
 
 
@@ -67,7 +67,7 @@ class HerReplayBuffer(DictReplayBuffer):
         self,
         env: VecEnv,
         buffer_size: int,
-        device: Union[th.device, str] = "auto",
+        device: Union[th.device, str] = "cpu",
         replay_buffer: Optional[DictReplayBuffer] = None,
         max_episode_length: Optional[int] = None,
         n_sampled_goal: int = 4,
@@ -75,7 +75,8 @@ class HerReplayBuffer(DictReplayBuffer):
         online_sampling: bool = True,
         handle_timeout_termination: bool = True,
     ):
-        super().__init__(buffer_size, env.observation_space, env.action_space, device, env.num_envs)
+
+        super(HerReplayBuffer, self).__init__(buffer_size, env.observation_space, env.action_space, device, env.num_envs)
 
         # convert goal_selection_strategy into GoalSelectionStrategy if string
         if isinstance(goal_selection_strategy, str):
@@ -217,7 +218,7 @@ class HerReplayBuffer(DictReplayBuffer):
             maybe_vec_env=None,
             online_sampling=False,
             n_sampled_goal=n_sampled_goal,
-        )  # pytype: disable=bad-return-type
+        )
 
     def sample_goals(
         self,
@@ -387,6 +388,7 @@ class HerReplayBuffer(DictReplayBuffer):
         done: np.ndarray,
         infos: List[Dict[str, Any]],
     ) -> None:
+
         if self.current_idx == 0 and self.full:
             # Clear info buffer
             self.info_buffer[self.pos] = deque(maxlen=self.max_episode_length)
