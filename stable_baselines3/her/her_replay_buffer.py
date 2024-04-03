@@ -171,8 +171,8 @@ class HerReplayBuffer(DictReplayBuffer):
         Sets the environment.
         :param env:
         """
-        if self.env is not None:
-            raise ValueError("Trying to set env of already initialized environment.")
+        # if self.env is not None:
+        #     raise ValueError("Trying to set env of already initialized environment.")
 
         self.env = env
 
@@ -605,6 +605,22 @@ class VecHerReplayBuffer(DictReplayBuffer):
                 infos=[infos[i]],
             )
 
+    def reset(self) -> None:
+        for buffer in self.buffers:
+            buffer.reset()
+
+    def close_env(self):
+        for buffers in self.buffers:
+            buffers.env.close()
+
+    def set_env(self, env: VecEnv) -> None:
+        """
+        See ``HerReplayBuffer`` doc.
+        :param env:
+        """
+        for buffer in self.buffers:
+            buffer.set_env(env)
+
     def sample(
         self,
         batch_size: int,
@@ -643,10 +659,7 @@ class VecHerReplayBuffer(DictReplayBuffer):
             for buffer in self.buffers:
                 self.buffers.truncate_last_trajectory()
 
-        def set_env(self, env: VecEnv) -> None:
-            """
-            See ``HerReplayBuffer`` doc.
-            :param env:
-            """
-            for buffer in self.buffers:
-                self.buffers.set_env(env)
+
+
+
+
