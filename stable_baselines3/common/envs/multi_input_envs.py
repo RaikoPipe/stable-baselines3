@@ -1,6 +1,6 @@
 from typing import Dict, Optional, Tuple, Union
 
-import gym
+import gymnasium as gym
 import numpy as np
 from gym import spaces
 

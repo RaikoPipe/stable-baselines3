@@ -6,7 +6,7 @@ import os
 import warnings
 from typing import Dict, Optional
 
-import gym
+import gymnasium as gym
 import numpy as np
 import pytest
 from gym import spaces

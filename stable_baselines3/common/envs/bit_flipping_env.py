@@ -2,7 +2,7 @@ from collections import OrderedDict
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
-from gym import Env, spaces
+from gymnasium import Env, spaces
 from gym.envs.registration import EnvSpec
 
 from stable_baselines3.common.type_aliases import Gym26StepReturn

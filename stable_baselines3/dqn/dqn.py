@@ -1,9 +1,9 @@
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
+import gymnasium as gym
 import numpy as np
 import torch as th
-from gym import spaces
 from torch.nn import functional as F
 
 from stable_baselines3.common.buffers import ReplayBuffer
@@ -14,7 +14,7 @@ from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedul
 from stable_baselines3.common.utils import get_linear_fn, get_parameters_by_name, is_vectorized_observation, polyak_update
 from stable_baselines3.dqn.policies import CnnPolicy, DQNPolicy, MlpPolicy, MultiInputPolicy
 
-SelfDQN = TypeVar("SelfDQN", bound="DQN")
+DQNSelf = TypeVar("DQNSelf", bound="DQN")
 
 
 class DQN(OffPolicyAlgorithm):
@@ -94,6 +94,7 @@ class DQN(OffPolicyAlgorithm):
         device: Union[th.device, str] = "auto",
         _init_setup_model: bool = True,
     ):
+
         super().__init__(
             policy,
             env,
@@ -115,7 +116,7 @@ class DQN(OffPolicyAlgorithm):
             seed=seed,
             sde_support=False,
             optimize_memory_usage=optimize_memory_usage,
-            supported_action_spaces=(spaces.Discrete,),
+            supported_action_spaces=(gym.spaces.Discrete,),
             support_multi_env=True,
         )
 
@@ -223,7 +224,7 @@ class DQN(OffPolicyAlgorithm):
 
     def predict(
         self,
-        observation: Union[np.ndarray, Dict[str, np.ndarray]],
+        observation: np.ndarray,
         state: Optional[Tuple[np.ndarray, ...]] = None,
         episode_start: Optional[np.ndarray] = None,
         deterministic: bool = False,
@@ -240,7 +241,7 @@ class DQN(OffPolicyAlgorithm):
         """
         if not deterministic and np.random.rand() < self.exploration_rate:
             if is_vectorized_observation(maybe_transpose(observation, self.observation_space), self.observation_space):
-                if isinstance(observation, dict):
+                if isinstance(self.observation_space, gym.spaces.Dict):
                     n_batch = observation[list(observation.keys())[0]].shape[0]
                 else:
                     n_batch = observation.shape[0]
@@ -252,14 +253,15 @@ class DQN(OffPolicyAlgorithm):
         return action, state
 
     def learn(
-        self: SelfDQN,
+        self: DQNSelf,
         total_timesteps: int,
         callback: MaybeCallback = None,
         log_interval: int = 4,
         tb_log_name: str = "DQN",
         reset_num_timesteps: bool = True,
         progress_bar: bool = False,
-    ) -> SelfDQN:
+    ) -> DQNSelf:
+
         return super().learn(
             total_timesteps=total_timesteps,
             callback=callback,

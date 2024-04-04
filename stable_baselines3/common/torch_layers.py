@@ -1,6 +1,6 @@
 from typing import Dict, List, Tuple, Type, Union
 
-import gym
+import gymnasium as gym
 import torch as th
 from gym import spaces
 from torch import nn

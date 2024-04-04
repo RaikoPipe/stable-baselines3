@@ -6,9 +6,9 @@ import warnings
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
+import gymnasium as gym
 import numpy as np
 import torch as th
-from gym import spaces
 
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.buffers import DictReplayBuffer, ReplayBuffer
@@ -19,9 +19,9 @@ from stable_baselines3.common.save_util import load_from_pkl, save_to_pkl
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, RolloutReturn, Schedule, TrainFreq, TrainFrequencyUnit
 from stable_baselines3.common.utils import safe_mean, should_collect_more_steps
 from stable_baselines3.common.vec_env import VecEnv
-from stable_baselines3.her.her_replay_buffer import HerReplayBuffer, VecHerReplayBuffer
+from stable_baselines3.her.her_replay_buffer import HerReplayBuffer
 
-SelfOffPolicyAlgorithm = TypeVar("SelfOffPolicyAlgorithm", bound="OffPolicyAlgorithm")
+OffPolicyAlgorithmSelf = TypeVar("OffPolicyAlgorithmSelf", bound="OffPolicyAlgorithm")
 
 
 class OffPolicyAlgorithm(BaseAlgorithm):
@@ -100,8 +100,9 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         sde_sample_freq: int = -1,
         use_sde_at_warmup: bool = False,
         sde_support: bool = True,
-        supported_action_spaces: Optional[Tuple[spaces.Space, ...]] = None,
+        supported_action_spaces: Optional[Tuple[gym.spaces.Space, ...]] = None,
     ):
+
         super().__init__(
             policy=policy,
             env=env,
@@ -172,12 +173,12 @@ class OffPolicyAlgorithm(BaseAlgorithm):
 
         # Use DictReplayBuffer if needed
         if self.replay_buffer_class is None:
-            if isinstance(self.observation_space, spaces.Dict):
+            if isinstance(self.observation_space, gym.spaces.Dict):
                 self.replay_buffer_class = DictReplayBuffer
             else:
                 self.replay_buffer_class = ReplayBuffer
 
-        elif self.replay_buffer_class in {HerReplayBuffer, VecHerReplayBuffer}:
+        elif self.replay_buffer_class == HerReplayBuffer:
             assert self.env is not None, "You must pass an environment when using `HerReplayBuffer`"
 
             # If using offline sampling, we need a classic replay buffer too
@@ -192,9 +193,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
                     optimize_memory_usage=self.optimize_memory_usage,
                 )
 
-            her_buffer_class = HerReplayBuffer if self.env.num_envs == 1 else VecHerReplayBuffer
-
-            self.replay_buffer = her_buffer_class(
+            self.replay_buffer = HerReplayBuffer(
                 self.env,
                 self.buffer_size,
                 device=self.device,
@@ -312,14 +311,15 @@ class OffPolicyAlgorithm(BaseAlgorithm):
         )
 
     def learn(
-        self: SelfOffPolicyAlgorithm,
+        self: OffPolicyAlgorithmSelf,
         total_timesteps: int,
         callback: MaybeCallback = None,
         log_interval: int = 4,
         tb_log_name: str = "run",
         reset_num_timesteps: bool = True,
         progress_bar: bool = False,
-    ) -> SelfOffPolicyAlgorithm:
+    ) -> OffPolicyAlgorithmSelf:
+
         total_timesteps, callback = self._setup_learn(
             total_timesteps,
             callback,
@@ -395,7 +395,7 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             unscaled_action, _ = self.predict(self._last_obs, deterministic=False)
 
         # Rescale the action from [low, high] to [-1, 1]
-        if isinstance(self.action_space, spaces.Box):
+        if isinstance(self.action_space, gym.spaces.Box):
             scaled_action = self.policy.scale_action(unscaled_action)
 
             # Add noise to the action (improve exploration)

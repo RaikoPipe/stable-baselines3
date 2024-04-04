@@ -1,8 +1,8 @@
 from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
+import gymnasium as gym
 import numpy as np
 import torch as th
-from gym import spaces
 from torch.nn import functional as F
 
 from stable_baselines3.common.buffers import ReplayBuffer
@@ -13,7 +13,7 @@ from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedul
 from stable_baselines3.common.utils import get_parameters_by_name, polyak_update
 from stable_baselines3.td3.policies import CnnPolicy, MlpPolicy, MultiInputPolicy, TD3Policy
 
-SelfTD3 = TypeVar("SelfTD3", bound="TD3")
+TD3Self = TypeVar("TD3Self", bound="TD3")
 
 
 class TD3(OffPolicyAlgorithm):
@@ -94,6 +94,7 @@ class TD3(OffPolicyAlgorithm):
         device: Union[th.device, str] = "auto",
         _init_setup_model: bool = True,
     ):
+
         super().__init__(
             policy,
             env,
@@ -115,7 +116,7 @@ class TD3(OffPolicyAlgorithm):
             seed=seed,
             sde_support=False,
             optimize_memory_usage=optimize_memory_usage,
-            supported_action_spaces=(spaces.Box),
+            supported_action_spaces=(gym.spaces.Box),
             support_multi_env=True,
         )
 
@@ -150,6 +151,7 @@ class TD3(OffPolicyAlgorithm):
 
         actor_losses, critic_losses = [], []
         for _ in range(gradient_steps):
+
             self._n_updates += 1
             # Sample replay buffer
             replay_data = self.replay_buffer.sample(batch_size, env=self._vec_normalize_env)
@@ -200,14 +202,15 @@ class TD3(OffPolicyAlgorithm):
         self.logger.record("train/critic_loss", np.mean(critic_losses))
 
     def learn(
-        self: SelfTD3,
+        self: TD3Self,
         total_timesteps: int,
         callback: MaybeCallback = None,
         log_interval: int = 4,
         tb_log_name: str = "TD3",
         reset_num_timesteps: bool = True,
         progress_bar: bool = False,
-    ) -> SelfTD3:
+    ) -> TD3Self:
+
         return super().learn(
             total_timesteps=total_timesteps,
             callback=callback,
