@@ -506,6 +506,9 @@ class BaseAlgorithm(ABC):
             self._last_obs = None
 
         self.n_envs = env.num_envs
+        # close current env
+        if self.env is not None:
+            self.env.close()
         self.env = env
 
     @abstractmethod

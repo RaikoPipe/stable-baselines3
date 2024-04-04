@@ -121,14 +121,19 @@ class HerReplayBuffer(DictReplayBuffer):
         assert "env" not in state
         self.env = None
 
+    def close_env(self):
+        self.env.close()
+
     def set_env(self, env: VecEnv) -> None:
         """
         Sets the environment.
 
         :param env:
         """
-        if self.env is not None:
-            raise ValueError("Trying to set env of already initialized environment.")
+        # fixme: Setting an environment with model.set_env() should also set the environment for her buffer.
+        #  Currently the old env remains in the buffer, which leads to BrokenPipeErrors when the environment is closed.
+        # if self.env is not None:
+        #    raise ValueError("Trying to set env of already initialized environment.")
 
         self.env = env
 
