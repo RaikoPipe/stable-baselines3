@@ -3,7 +3,54 @@
 Changelog
 ==========
 
-Release 2.4.0a11 (WIP)
+Release 2.5.0a1 (WIP)
+--------------------------
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
+- Increased minimum required version of PyTorch to 2.3.0
+- Removed support for Python 3.8
+
+New Features:
+^^^^^^^^^^^^^
+- Added support for NumPy v2.0: ``VecNormalize`` now cast normalized rewards to float32, updated bit flipping env to avoid overflow issues too
+- Added official support for Python 3.12
+
+Bug Fixes:
+^^^^^^^^^^
+
+`SB3-Contrib`_
+^^^^^^^^^^^^^^
+
+`RL Zoo`_
+^^^^^^^^^
+
+`SBX`_ (SB3 + Jax)
+^^^^^^^^^^^^^^^^^^
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Others:
+^^^^^^^
+
+Documentation:
+^^^^^^^^^^^^^^
+- Added Decisions and Dragons to resources. (@jmacglashan)
+- Updated PyBullet example, now compatible with Gymnasium
+- Added link to policies for ``policy_kwargs`` parameter (@kplers)
+- Add FootstepNet Envs to the project page (@cgaspard3333)
+- Added FRASA to the project page (@MarcDcls)
+
+Release 2.4.1 (2024-12-20)
+--------------------------
+
+Bug Fixes:
+^^^^^^^^^^
+- Fixed a bug introduced in v2.4.0 where the ``VecVideoRecorder`` would override videos
+
+
+Release 2.4.0 (2024-11-18)
 --------------------------
 
 **New algorithm: CrossQ in SB3 Contrib, Gymnasium v1.0 support**
@@ -18,13 +65,13 @@ Release 2.4.0a11 (WIP)
 .. warning::
 
     Stable-Baselines3 (SB3) v2.4.0 will be the last one supporting Python 3.8 (end of life in October 2024)
-    and PyTorch < 2.0.
-    We highly recommended you to upgrade to Python >= 3.9 and PyTorch >= 2.0.
+    and PyTorch < 2.3.
+    We highly recommended you to upgrade to Python >= 3.9 and PyTorch >= 2.3 (compatible with NumPy v2).
 
 
 Breaking Changes:
 ^^^^^^^^^^^^^^^^^
-- Increase minimum required version of Gymnasium to 0.29.1
+- Increased minimum required version of Gymnasium to 0.29.1
 
 New Features:
 ^^^^^^^^^^^^^
@@ -73,9 +120,6 @@ Others:
 - Switched to uv to download packages faster on GitHub CI
 - Updated dependencies for read the doc
 - Removed unnecessary ``copy_obs_dict`` method for ``SubprocVecEnv``, remove the use of ordered dict and rename ``flatten_obs`` to ``stack_obs``
-
-Bug Fixes:
-^^^^^^^^^^
 
 Documentation:
 ^^^^^^^^^^^^^^
@@ -1705,4 +1749,4 @@ And all the contributors:
 @DavyMorgan @luizapozzobon @Bonifatius94 @theSquaredError @harveybellini @DavyMorgan @FieteO @jonasreiher @npit @WeberSamuel @troiganto
 @lutogniew @lbergmann1 @lukashass @BertrandDecoster @pseudo-rnd-thoughts @stefanbschneider @kyle-he @PatrickHelm @corentinlger
 @marekm4 @stagoverflow @rushitnshah @markscsmith @NickLucche @cschindlbeck @peteole @jak3122 @will-maclean
-@brn-dev
+@brn-dev @jmacglashan @kplers @MarcDcls
